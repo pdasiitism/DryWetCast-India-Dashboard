@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DryWetCast India — Forecast comparison</title>
+  <style>
+    :root {
+      --ink: #102c3b;
+      --muted: #60747d;
+      --line: #d7e0e1;
+      --paper: #ffffff;
+      --wash: #f2f6f5;
+      --teal: #168578;
+      --navy: #0c3142;
+      --shadow: 0 15px 36px rgba(15, 47, 59, .08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #edf3f1;
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .shell { width: min(1560px, calc(100% - 40px)); margin: 26px auto 46px; }
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 20px;
+    }
+    h1 { margin: 0; font-size: clamp(25px, 2.4vw, 38px); line-height: 1.05; letter-spacing: -.035em; }
+    .init { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+    .hidden { display: none !important; }
+    .control {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: rgba(255,255,255,.88);
+      box-shadow: 0 4px 14px rgba(15, 47, 59, .04);
+    }
+    .control-label { padding: 0 8px 0 6px; color: var(--muted); font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; }
+    button {
+      border: 0;
+      border-radius: 9px;
+      padding: 9px 13px;
+      color: #3e535c;
+      background: transparent;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    button.active { color: white; background: var(--navy); box-shadow: 0 3px 9px rgba(12,49,66,.19); }
+    button[data-event="wet"].active { background: #2166ac; }
+    button[data-event="dry"].active { background: #c94b32; }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      overflow: hidden;
+      background: var(--line);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      margin-bottom: 18px;
+    }
+    .comparison-note {
+      margin: -6px 0 16px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .metric { background: rgba(255,255,255,.88); padding: 13px 16px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .metric span { color: var(--muted); font-size: 12px; font-weight: 700; }
+    .metric strong { font-size: 19px; letter-spacing: -.02em; }
+    .maps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .panel {
+      min-width: 0;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .panel-head { padding: 17px 18px 11px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .panel h2 { margin: 0; font-size: 17px; letter-spacing: -.015em; }
+    .panel .tag { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+    .map-wrap { padding: 0 8px; }
+    .map-wrap img { display: block; width: 100%; height: auto; aspect-ratio: 1.04; object-fit: contain; }
+    .legend { padding: 6px 18px 18px; }
+    .legend-title { color: var(--muted); font-size: 11px; font-weight: 750; margin-bottom: 7px; }
+    .swatches { display: grid; grid-template-columns: repeat(6, 1fr); overflow: hidden; border-radius: 6px; border: 1px solid rgba(16,44,59,.12); }
+    .swatches.diff { grid-template-columns: repeat(8, 1fr); }
+    .swatch { height: 12px; }
+    .ticks { display: grid; grid-template-columns: repeat(6, 1fr); margin-top: 4px; color: #6b7f87; font-size: 9px; }
+    .ticks.diff { grid-template-columns: repeat(8, 1fr); }
+    .ticks span { text-align: center; transform: translateX(-50%); white-space: nowrap; }
+    .ticks span:first-child { transform: none; text-align: left; }
+    .ticks span:last-child { transform: none; text-align: right; }
+    .direction { display: flex; justify-content: space-between; margin-top: 8px; font-size: 10px; font-weight: 750; color: var(--muted); }
+    footer { margin-top: 18px; display: flex; align-items: center; justify-content: space-between; gap: 18px; color: var(--muted); font-size: 12px; }
+    footer p { margin: 0; }
+    .downloads { display: flex; gap: 8px; flex-wrap: wrap; }
+    .downloads a { color: var(--navy); text-decoration: none; font-weight: 750; padding: 8px 10px; background: rgba(255,255,255,.78); border: 1px solid var(--line); border-radius: 9px; }
+    .downloads a:hover { background: white; }
+    @media (max-width: 1050px) {
+      header { align-items: flex-start; flex-direction: column; }
+      .controls { justify-content: flex-start; }
+      .maps { grid-template-columns: 1fr 1fr; }
+      .panel:last-child { grid-column: 1 / -1; width: calc(50% - 8px); justify-self: center; }
+    }
+    @media (max-width: 700px) {
+      .shell { width: min(100% - 22px, 620px); margin-top: 17px; }
+      .summary, .maps { grid-template-columns: 1fr; }
+      .panel:last-child { grid-column: auto; width: 100%; }
+      .metric { padding: 10px 13px; }
+      footer { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>DryWetCast India</h1>
+        <p class="init" id="initialization">Initialization 15 October 2026, 00 UTC</p>
+      </div>
+      <div class="controls" aria-label="Comparison controls">
+        <div class="control">
+          <span class="control-label">Compare</span>
+          <button class="active" data-mode="sources">GEFS vs NEPS</button>
+          <button data-mode="features">Full vs Reduced</button>
+        </div>
+        <div class="control" id="family-control">
+          <span class="control-label">Configuration</span>
+          <button class="active" data-family="reduced">Reduced</button>
+          <button data-family="full">Full</button>
+        </div>
+        <div class="control hidden" id="source-control">
+          <span class="control-label">Forecast source</span>
+          <button class="active" data-source="gefs">GEFS</button>
+          <button data-source="neps">NEPS</button>
+        </div>
+        <div class="control">
+          <span class="control-label">Event</span>
+          <button class="active" data-event="dry">DRY</button>
+          <button data-event="wet">WET</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="summary" aria-label="Comparison statistics">
+      <div class="metric"><span id="mean-label">Mean GEFS − NEPS</span><strong id="mean">−0.006</strong></div>
+      <div class="metric"><span>Mean absolute difference</span><strong id="mae">0.019</strong></div>
+      <div class="metric"><span>Spatial correlation</span><strong id="correlation">0.990</strong></div>
+    </section>
+    <p class="comparison-note" id="comparison-note">The selected Reduced configuration is compared between the GEFS- and NEPS-rainfall model versions.</p>
+
+    <section class="maps">
+      <article class="panel">
+        <div class="panel-head"><h2 id="gefs-title">GEFS DRY probability</h2><span class="tag" id="left-tag">GEFS</span></div>
+        <div class="map-wrap"><img id="gefs-map" src="assets/reduced-dry-gefs.png" alt="GEFS DRY probability map"></div>
+        <div class="legend probability-legend"></div>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><h2 id="neps-title">NEPS DRY probability</h2><span class="tag" id="right-tag">NEPS</span></div>
+        <div class="map-wrap"><img id="neps-map" src="assets/reduced-dry-neps.png" alt="NEPS DRY probability map"></div>
+        <div class="legend probability-legend"></div>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><h2 id="difference-title">DRY difference</h2><span class="tag" id="difference-tag">GEFS − NEPS</span></div>
+        <div class="map-wrap"><img id="difference-map" src="assets/reduced-dry-difference.png" alt="GEFS minus NEPS DRY probability difference map"></div>
+        <div class="legend" id="difference-legend"></div>
+      </article>
+    </section>
+
+    <footer>
+      <p>Probability values and differences are shown on the literal 0–1 scale.</p>
+      <div class="downloads">
+        <a href="https://github.com/pdasiitism/DryWetCast-India" target="_blank" rel="noopener">Forecast repository</a>
+        <a href="downloads/comparison_statistics.csv" download>Statistics CSV</a>
+        <a href="downloads/comparison_difference_fields.npz" download>Difference fields NPZ</a>
+      </div>
+    </footer>
+  </main>
+
+  <script src="data.js"></script>
+  <script>
+    const palettes = {
+      dry: ['#FFF9E8','#FCE7A2','#F9C65A','#F08A3C','#C94B32','#7F1D1D'],
+      wet: ['#F1FAFE','#CDECF7','#91D0E8','#4B9DCE','#2166AC','#08306B'],
+      difference: ['#08306B','#2166AC','#4B9DCE','#CDECF7','#FFF9E8','#F9C65A','#F08A3C','#7F1D1D']
+    };
+    const dashboardData = window.DASHBOARD_DATA;
+    const stats = dashboardData.stats;
+    let mode = 'sources';
+    let family = 'reduced';
+    let source = 'gefs';
+    let eventType = 'dry';
+
+    function swatches(colors, extraClass='') {
+      return `<div class="swatches ${extraClass}">${colors.map(c => `<span class="swatch" style="background:${c}"></span>`).join('')}</div>`;
+    }
+    function probabilityLegend() {
+      return `<div class="legend-title">Forecast probability</div>${swatches(palettes[eventType])}<div class="ticks"><span>0</span><span>.2</span><span>.4</span><span>.6</span><span>.8</span><span>1</span></div>`;
+    }
+    function differenceLegend(label, lowerName, higherName) {
+      return `<div class="legend-title">Probability difference: ${label}</div>${swatches(palettes.difference, 'diff')}<div class="ticks diff"><span>≤−.2</span><span>−.1</span><span>−.05</span><span>0</span><span>+.05</span><span>+.1</span><span>+.2</span><span>≥+.2</span></div><div class="direction"><span>${lowerName} higher</span><span>${higherName} higher</span></div>`;
+    }
+    function signed(value) { return `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(3)}`; }
+
+    function update() {
+      document.getElementById('initialization').textContent = dashboardData.initialization;
+      const label = eventType.toUpperCase();
+      document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+      document.querySelectorAll('[data-family]').forEach(b => b.classList.toggle('active', b.dataset.family === family));
+      document.querySelectorAll('[data-source]').forEach(b => b.classList.toggle('active', b.dataset.source === source));
+      document.querySelectorAll('[data-event]').forEach(b => b.classList.toggle('active', b.dataset.event === eventType));
+      document.getElementById('family-control').classList.toggle('hidden', mode !== 'sources');
+      document.getElementById('source-control').classList.toggle('hidden', mode !== 'features');
+
+      let selected;
+      let differenceLabel;
+      let negativeName;
+      let positiveName;
+      if (mode === 'sources') {
+        const stem = `${family}-${eventType}`;
+        document.getElementById('gefs-title').textContent = `GEFS ${label} probability`;
+        document.getElementById('neps-title').textContent = `NEPS ${label} probability`;
+        document.getElementById('left-tag').textContent = 'GEFS';
+        document.getElementById('right-tag').textContent = 'NEPS';
+        document.getElementById('difference-tag').textContent = 'GEFS − NEPS';
+        document.getElementById('gefs-map').src = `assets/${stem}-gefs.png`;
+        document.getElementById('neps-map').src = `assets/${stem}-neps.png`;
+        document.getElementById('difference-map').src = `assets/${stem}-difference.png`;
+        document.getElementById('gefs-map').alt = `GEFS ${label} probability map`;
+        document.getElementById('neps-map').alt = `NEPS ${label} probability map`;
+        document.getElementById('difference-map').alt = `GEFS minus NEPS ${label} probability difference map`;
+        document.getElementById('mean-label').textContent = 'Mean GEFS − NEPS';
+        document.getElementById('comparison-note').textContent = `The selected ${family[0].toUpperCase() + family.slice(1)} configuration is compared between the GEFS- and NEPS-rainfall model versions.`;
+        selected = stats[stem];
+        differenceLabel = 'GEFS − NEPS';
+        negativeName = 'NEPS';
+        positiveName = 'GEFS';
+      } else {
+        const sourceName = source.toUpperCase();
+        document.getElementById('gefs-title').textContent = `${sourceName} Full ${label} probability`;
+        document.getElementById('neps-title').textContent = `${sourceName} Reduced ${label} probability`;
+        document.getElementById('left-tag').textContent = 'FULL';
+        document.getElementById('right-tag').textContent = 'REDUCED';
+        document.getElementById('difference-tag').textContent = 'FULL − REDUCED';
+        document.getElementById('gefs-map').src = `assets/full-${eventType}-${source}.png`;
+        document.getElementById('neps-map').src = `assets/reduced-${eventType}-${source}.png`;
+        document.getElementById('difference-map').src = `assets/${source}-${eventType}-full-minus-reduced.png`;
+        document.getElementById('gefs-map').alt = `${sourceName} Full ${label} probability map`;
+        document.getElementById('neps-map').alt = `${sourceName} Reduced ${label} probability map`;
+        document.getElementById('difference-map').alt = `${sourceName} Full minus Reduced ${label} probability difference map`;
+        document.getElementById('mean-label').textContent = 'Mean Full − Reduced';
+        document.getElementById('comparison-note').textContent = `Full and Reduced ${sourceName} configurations are compared directly. This shows how their probabilities differ; deciding which is more accurate requires verification against observations.`;
+        selected = stats[`${source}-full-reduced-${eventType}`];
+        differenceLabel = 'Full − Reduced';
+        negativeName = 'Reduced';
+        positiveName = 'Full';
+      }
+      document.getElementById('difference-title').textContent = `${label} difference`;
+      document.querySelectorAll('.probability-legend').forEach(el => el.innerHTML = probabilityLegend());
+      document.getElementById('difference-legend').innerHTML = differenceLegend(differenceLabel, negativeName, positiveName);
+      document.getElementById('mean').textContent = signed(selected.mean);
+      document.getElementById('mae').textContent = selected.mae.toFixed(3);
+      document.getElementById('correlation').textContent = selected.correlation.toFixed(3);
+    }
+    document.querySelectorAll('[data-mode]').forEach(button => button.addEventListener('click', () => { mode = button.dataset.mode; update(); }));
+    document.querySelectorAll('[data-family]').forEach(button => button.addEventListener('click', () => { family = button.dataset.family; update(); }));
+    document.querySelectorAll('[data-source]').forEach(button => button.addEventListener('click', () => { source = button.dataset.source; update(); }));
+    document.querySelectorAll('[data-event]').forEach(button => button.addEventListener('click', () => { eventType = button.dataset.event; update(); }));
+    update();
+  </script>
+</body>
+</html>

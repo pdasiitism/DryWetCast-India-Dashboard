@@ -1,0 +1,74 @@
+name: Update forecast from Google Drive
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Three evening checks in India. Incomplete uploads are never published.
+    - cron: '15 13,15,17 * * *'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_DRIVE_API_KEY: ${{ secrets.GOOGLE_DRIVE_API_KEY }}
+      DRIVE_PARENT_FOLDER_ID: '1zGAcTf_kovWZvKlI1j2ud9Hrx207Sv04'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check automation configuration
+        id: configured
+        shell: bash
+        run: |
+          if [ -n "$GOOGLE_DRIVE_API_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "GOOGLE_DRIVE_API_KEY has not been configured; leaving the current dashboard unchanged."
+          fi
+
+      - name: Set up Python
+        if: steps.configured.outputs.ready == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dashboard dependencies
+        if: steps.configured.outputs.ready == 'true'
+        run: pip install -r requirements.txt
+
+      - name: Download and validate latest complete forecast
+        if: steps.configured.outputs.ready == 'true'
+        run: >-
+          python scripts/update_dashboard.py
+          --parent-folder-id "$DRIVE_PARENT_FOLDER_ID"
+          --api-key "$GOOGLE_DRIVE_API_KEY"
+          --site-dir site
+          --boundaries data/india_states.geojson
+
+      - name: Configure GitHub Pages
+        if: steps.configured.outputs.ready == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Package dashboard
+        if: steps.configured.outputs.ready == 'true'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - name: Deploy updated dashboard
+        if: steps.configured.outputs.ready == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v4
