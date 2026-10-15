@@ -10,20 +10,26 @@ import json
 from pathlib import Path
 import re
 import shutil
+import ssl
 import tempfile
 from urllib.parse import quote, urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm, ListedColormap
 import numpy as np
+import certifi
 
 
 CONFIGS = ('gefs_reduced', 'gefs_full', 'ncmrwf_reduced', 'ncmrwf_full')
-DATE_PATTERN = re.compile(r'^20\d{6}$')
+DATE_PATTERN = re.compile(r'^(20\d{6})(?:T(\d{2}))?$')
 FOLDER_MIME = 'application/vnd.google-apps.folder'
-DRIVE_API = 'https://www.googleapis.com/drive/v3/files'
+DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/{folder_id}?usp=sharing&hl=en'
+DRIVE_DOWNLOAD_URL = 'https://drive.usercontent.google.com/download'
+USER_AGENT = ('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+              '(KHTML, like Gecko) Chrome/124.0 Safari/537.36')
+SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 DRY_COLORS = ['#FFF9E8', '#FCE7A2', '#F9C65A', '#F08A3C', '#C94B32', '#7F1D1D']
 WET_COLORS = ['#F1FAFE', '#CDECF7', '#91D0E8', '#4B9DCE', '#2166AC', '#08306B']
@@ -44,53 +50,73 @@ mpl.rcParams.update({
 })
 
 
-def drive_children(folder_id: str, api_key: str) -> list[dict]:
-    """List every direct child of a public Google Drive folder."""
-    files = []
-    page_token = None
-    while True:
-        params = {
-            'q': f"'{folder_id}' in parents and trashed = false",
-            'fields': 'nextPageToken,files(id,name,mimeType,modifiedTime,size)',
-            'pageSize': 1000,
-            'key': api_key,
-            'orderBy': 'name_natural',
-        }
-        if page_token:
-            params['pageToken'] = page_token
-        with urlopen(f'{DRIVE_API}?{urlencode(params)}', timeout=60) as response:
-            payload = json.load(response)
-        files.extend(payload.get('files', []))
-        page_token = payload.get('nextPageToken')
-        if not page_token:
-            return files
+def drive_children(folder_id: str) -> list[dict]:
+    """List the direct children exposed by an Anyone-with-the-link Drive folder."""
+    request = Request(DRIVE_FOLDER_URL.format(folder_id=quote(folder_id)),
+                      headers={'User-Agent': USER_AGENT})
+    with urlopen(request, timeout=60, context=SSL_CONTEXT) as response:
+        html = response.read().decode('utf-8')
+
+    match = re.search(r"window\['_DRIVE_ivd'\]\s*=\s*'((?:[^'\\]|\\.)*)'", html)
+    if not match:
+        raise RuntimeError(
+            f'Could not read public Drive folder {folder_id}. Confirm it is shared as '
+            'Anyone with the link and that Google has not temporarily rate-limited downloads.'
+        )
+
+    # Google embeds the public listing as JSON with JavaScript \xHH escapes.
+    decoded = re.sub(r'\\x([0-9a-fA-F]{2})',
+                     lambda value: chr(int(value.group(1), 16)), match.group(1))
+    payload = json.loads(decoded)
+    children = [] if not payload or payload[0] is None else payload[0]
+    return [{'id': item[0], 'name': item[2], 'mimeType': item[3]}
+            for item in children if len(item) >= 4]
 
 
-def download_file(file_id: str, api_key: str, destination: Path) -> None:
-    url = f'{DRIVE_API}/{quote(file_id)}?{urlencode({"alt": "media", "key": api_key})}'
-    with urlopen(url, timeout=180) as response, destination.open('wb') as handle:
+def download_file(file_id: str, destination: Path) -> None:
+    params = urlencode({'id': file_id, 'export': 'download', 'confirm': 't'})
+    request = Request(f'{DRIVE_DOWNLOAD_URL}?{params}', headers={'User-Agent': USER_AGENT})
+    with urlopen(request, timeout=180, context=SSL_CONTEXT) as response, destination.open('wb') as handle:
         shutil.copyfileobj(response, handle)
 
 
-def locate_latest_complete(parent_id: str, api_key: str) -> tuple[str, str, dict[str, dict]]:
-    dates = [item for item in drive_children(parent_id, api_key)
-             if item.get('mimeType') == FOLDER_MIME and DATE_PATTERN.fullmatch(item.get('name', ''))]
-    for date_folder in sorted(dates, key=lambda item: item['name'], reverse=True):
-        children = drive_children(date_folder['id'], api_key)
+def locate_latest_complete(parent_id: str) -> tuple[str, str, dict[str, dict]]:
+    parent_children = drive_children(parent_id)
+    if len(parent_children) >= 50:
+        raise RuntimeError(
+            'The public parent folder exposes 50 items, which is the public-page limit. '
+            'Move older cycles to an archive folder so the newest cycle can be selected safely.'
+        )
+
+    dates = []
+    for item in parent_children:
+        match = DATE_PATTERN.fullmatch(item.get('name', ''))
+        if item.get('mimeType') == FOLDER_MIME and match:
+            item = dict(item)
+            item['forecast_date'] = match.group(1)
+            item['forecast_cycle'] = match.group(2) or '00'
+            dates.append(item)
+
+    for date_folder in sorted(dates,
+                              key=lambda item: (item['forecast_date'], item['forecast_cycle']),
+                              reverse=True):
+        children = drive_children(date_folder['id'])
         folders = {item['name'].lower(): item for item in children if item.get('mimeType') == FOLDER_MIME}
         selected = {}
         for config in CONFIGS:
             folder = folders.get(config)
             if not folder:
                 break
-            npz_files = [item for item in drive_children(folder['id'], api_key)
+            npz_files = [item for item in drive_children(folder['id'])
                          if item.get('name', '').lower().endswith('.npz')]
             if len(npz_files) != 1:
                 break
             selected[config] = npz_files[0]
         if len(selected) == len(CONFIGS):
-            return date_folder['name'], date_folder['id'], selected
-    raise RuntimeError('No complete YYYYMMDD folder containing all four configuration NPZ files was found')
+            return date_folder['forecast_date'], date_folder['forecast_cycle'], selected
+    raise RuntimeError(
+        'No complete YYYYMMDD or YYYYMMDDTHH folder containing all four configuration NPZ files was found'
+    )
 
 
 def load_forecasts(input_dir: Path) -> dict[str, dict[str, np.ndarray]]:
@@ -236,24 +262,26 @@ def build_site(forecasts: dict[str, dict[str, np.ndarray]], site_dir: Path,
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--parent-folder-id', required=True)
-    parser.add_argument('--api-key', required=True)
     parser.add_argument('--site-dir', type=Path, default=Path('site'))
     parser.add_argument('--boundaries', type=Path, default=Path('data/india_states.geojson'))
     parser.add_argument('--work-dir', type=Path)
     args = parser.parse_args()
 
-    date_name, _, files = locate_latest_complete(args.parent_folder_id, args.api_key)
+    date_name, cycle_name, files = locate_latest_complete(args.parent_folder_id)
     base = args.work_dir or Path(tempfile.mkdtemp(prefix='drywetcast-dashboard-'))
     base.mkdir(parents=True, exist_ok=True)
     try:
         for config, item in files.items():
-            download_file(item['id'], args.api_key, base / f'{config}.npz')
+            download_file(item['id'], base / f'{config}.npz')
         forecasts = load_forecasts(base)
         forecast_date = str(forecasts['gefs_reduced']['date'].item())
+        forecast_cycle = str(forecasts['gefs_reduced']['cycle'].item()).zfill(2)
         if forecast_date != date_name:
             raise ValueError(f'Drive folder is {date_name}, but its NPZ initialization is {forecast_date}')
+        if forecast_cycle != cycle_name:
+            raise ValueError(f'Drive folder cycle is {cycle_name}, but its NPZ cycle is {forecast_cycle}')
         build_site(forecasts, args.site_dir, args.boundaries)
-        print(f'Published dashboard inputs for {forecast_date}')
+        print(f'Published dashboard inputs for {forecast_date} {forecast_cycle} UTC')
     finally:
         if args.work_dir is None:
             shutil.rmtree(base, ignore_errors=True)

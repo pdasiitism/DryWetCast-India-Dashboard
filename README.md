@@ -23,14 +23,11 @@ It validates the common initialization, cycle, grid, variables and probability r
 before rebuilding and publishing the site. A missing or invalid upload leaves the
 previous successful dashboard unchanged.
 
-The workflow requires one repository secret:
-
-```text
-GOOGLE_DRIVE_API_KEY
-```
-
-The API key is used only to list and download files that the folder owner has already
-made available to anyone with the link. Restrict the key to the Google Drive API.
+The workflow reads the folder through its public `Anyone with the link` pages. It does
+not use a Google login, Google Cloud access, Drive API key, GitHub secret or access to
+the original forecast bucket. The public Google Drive view exposes at most 50 direct
+children, so older date folders should be moved into an archive folder before the
+parent reaches 50 cycles.
 
 The configured public parent folder is:
 
@@ -45,8 +42,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python scripts/update_dashboard.py \
-  --parent-folder-id 1zGAcTf_kovWZvKlI1j2ud9Hrx207Sv04 \
-  --api-key "$GOOGLE_DRIVE_API_KEY"
+  --parent-folder-id 1zGAcTf_kovWZvKlI1j2ud9Hrx207Sv04
 ```
 
 The publishable static site is in `site/`.
