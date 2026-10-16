@@ -247,7 +247,7 @@ def build_site(forecasts: dict[str, dict[str, np.ndarray]], site_dir: Path,
     (site_dir / 'data.js').write_text('window.DASHBOARD_DATA = ' + json.dumps(data, indent=2) + ';\n')
 
     with (downloads / 'comparison_statistics.csv').open('w', newline='') as handle:
-        writer = csv.writer(handle)
+        writer = csv.writer(handle, lineterminator='\n')
         writer.writerow(['selection', 'event', 'difference_definition', 'mean_difference', 'mae',
                          'rmse', 'correlation', 'p95_absolute_difference',
                          'maximum_absolute_difference', 'land_cells'])

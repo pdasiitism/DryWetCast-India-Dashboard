@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>DryWetCast India — Forecast comparison</title>
   <style>
     :root {
@@ -194,7 +197,11 @@
     </footer>
   </main>
 
-  <script src="data.js"></script>
+  <script>
+    // The dashboard is replaced daily at the same URL. A unique request keeps
+    // browsers and intermediary caches from showing yesterday's data record.
+    document.write('<script src="data.js?v=' + Date.now() + '"><\/script>');
+  </script>
   <script>
     const palettes = {
       dry: ['#FFF9E8','#FCE7A2','#F9C65A','#F08A3C','#C94B32','#7F1D1D'],
@@ -202,6 +209,8 @@
       difference: ['#08306B','#2166AC','#4B9DCE','#CDECF7','#FFF9E8','#F9C65A','#F08A3C','#7F1D1D']
     };
     const dashboardData = window.DASHBOARD_DATA;
+    const assetVersion = encodeURIComponent(`${dashboardData.date}-${dashboardData.cycle}`);
+    const asset = path => `${path}?v=${assetVersion}`;
     const stats = dashboardData.stats;
     let mode = 'sources';
     let family = 'reduced';
@@ -240,9 +249,9 @@
         document.getElementById('left-tag').textContent = 'GEFS';
         document.getElementById('right-tag').textContent = 'NEPS';
         document.getElementById('difference-tag').textContent = 'GEFS − NEPS';
-        document.getElementById('gefs-map').src = `assets/${stem}-gefs.png`;
-        document.getElementById('neps-map').src = `assets/${stem}-neps.png`;
-        document.getElementById('difference-map').src = `assets/${stem}-difference.png`;
+        document.getElementById('gefs-map').src = asset(`assets/${stem}-gefs.png`);
+        document.getElementById('neps-map').src = asset(`assets/${stem}-neps.png`);
+        document.getElementById('difference-map').src = asset(`assets/${stem}-difference.png`);
         document.getElementById('gefs-map').alt = `GEFS ${label} probability map`;
         document.getElementById('neps-map').alt = `NEPS ${label} probability map`;
         document.getElementById('difference-map').alt = `GEFS minus NEPS ${label} probability difference map`;
@@ -259,9 +268,9 @@
         document.getElementById('left-tag').textContent = 'FULL';
         document.getElementById('right-tag').textContent = 'REDUCED';
         document.getElementById('difference-tag').textContent = 'FULL − REDUCED';
-        document.getElementById('gefs-map').src = `assets/full-${eventType}-${source}.png`;
-        document.getElementById('neps-map').src = `assets/reduced-${eventType}-${source}.png`;
-        document.getElementById('difference-map').src = `assets/${source}-${eventType}-full-minus-reduced.png`;
+        document.getElementById('gefs-map').src = asset(`assets/full-${eventType}-${source}.png`);
+        document.getElementById('neps-map').src = asset(`assets/reduced-${eventType}-${source}.png`);
+        document.getElementById('difference-map').src = asset(`assets/${source}-${eventType}-full-minus-reduced.png`);
         document.getElementById('gefs-map').alt = `${sourceName} Full ${label} probability map`;
         document.getElementById('neps-map').alt = `${sourceName} Reduced ${label} probability map`;
         document.getElementById('difference-map').alt = `${sourceName} Full minus Reduced ${label} probability difference map`;
