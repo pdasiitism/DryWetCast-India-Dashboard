@@ -5,8 +5,9 @@ on:
   schedule:
     # Repeated evening checks in India. GitHub schedules may start late, so
     # several attempts are used; incomplete uploads are never published.
-    - cron: '7,37 13-17 * * *'
-    - cron: '7 18 * * *'
+    - cron: '30 10 * * *'
+    - cron: '0,30 11-17 * * *'
+    - cron: '0 18 * * *'
 
 permissions:
   contents: read
