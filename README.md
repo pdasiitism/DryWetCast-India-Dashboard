@@ -17,8 +17,10 @@ Forecasting code and model documentation: [DryWetCast-India](https://github.com/
 ## Daily update
 
 The `Update forecast from Google Drive` GitHub Actions workflow checks the public
-Drive parent folder roughly every 30 minutes from 16:00 through 23:30 IST. GitHub may
-start scheduled jobs later than their nominal time, so the repeated checks make the
+Drive parent folder roughly every 20 minutes from about 16:00 through 23:45 IST. The
+checks use off-peak cron minutes rather than `:00` and `:30`, when GitHub's scheduler
+is most congested. GitHub may still start jobs later than their nominal time, so the
+repeated checks make the
 daily update resilient to both scheduling delays and uploads that finish late. It
 selects the newest date folder only when all four configuration folders each contain
 exactly one NPZ forecast record.
