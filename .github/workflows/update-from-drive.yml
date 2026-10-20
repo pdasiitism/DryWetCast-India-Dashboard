@@ -3,12 +3,11 @@ name: Update forecast from Google Drive
 on:
   workflow_dispatch:
   schedule:
-    # Repeated evening checks in India. GitHub schedules may start late, so
-    # several attempts are used; incomplete uploads are never published.
-    # Avoid common exact-hour and half-hour scheduling boundaries.
-    - cron: '32,52 10 * * *'
-    - cron: '12,32,52 11-17 * * *'
-    - cron: '12 18 * * *'
+    # Primary daily attempt at 4:00 PM IST (10:30 UTC), followed by
+    # half-hourly retries from 4:30 PM through 8:00 PM IST. Incomplete
+    # uploads are never published.
+    - cron: '30 10 * * *'
+    - cron: '0,30 11-14 * * *'
 
 permissions:
   contents: read
