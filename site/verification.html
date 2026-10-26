@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>DryWetCast India — Forecast verification</title>
+  <style>
+    :root {
+      --ink:#102c3b; --muted:#60747d; --line:#d7e0e1; --paper:#fff;
+      --wash:#f2f6f5; --teal:#168578; --navy:#0c3142; --dry:#c94b32;
+      --wet:#2166ac; --shadow:0 15px 36px rgba(15,47,59,.08);
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#edf3f1; color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    .shell { width:min(1420px,calc(100% - 40px)); margin:26px auto 48px; }
+    header { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:20px; }
+    .eyebrow { margin:0 0 8px; color:var(--teal); font-size:11px; font-weight:850; letter-spacing:.11em; text-transform:uppercase; }
+    h1 { margin:0; font-size:clamp(27px,3vw,42px); line-height:1.04; letter-spacing:-.04em; }
+    .subtitle { max-width:760px; margin:10px 0 0; color:var(--muted); line-height:1.55; font-size:14px; }
+    .nav { display:flex; gap:8px; flex-wrap:wrap; }
+    .nav a { color:var(--navy); text-decoration:none; font-size:13px; font-weight:800; padding:10px 13px; border:1px solid var(--line); border-radius:10px; background:rgba(255,255,255,.82); }
+    .nav a.active { color:#fff; background:var(--navy); border-color:var(--navy); }
+    .status { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; border:1px solid var(--line); background:var(--line); border-radius:15px; overflow:hidden; margin-bottom:16px; }
+    .status-item { background:rgba(255,255,255,.9); padding:14px 16px; }
+    .status-item span { display:block; color:var(--muted); font-size:10px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; margin-bottom:5px; }
+    .status-item strong { display:block; font-size:17px; letter-spacing:-.02em; }
+    .toolbar { display:flex; justify-content:space-between; align-items:center; gap:14px; margin-bottom:16px; padding:10px; background:rgba(255,255,255,.88); border:1px solid var(--line); border-radius:14px; }
+    .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .control { display:flex; align-items:center; gap:5px; }
+    .control-label { color:var(--muted); font-size:10px; font-weight:850; letter-spacing:.07em; text-transform:uppercase; padding:0 5px; }
+    button,select { font:inherit; font-size:13px; font-weight:750; border:0; border-radius:9px; padding:9px 12px; color:#3e535c; background:var(--wash); cursor:pointer; }
+    button.active { color:#fff; background:var(--navy); }
+    button[data-event="dry"].active { background:var(--dry); }
+    button[data-event="wet"].active { background:var(--wet); }
+    .window { color:var(--muted); font-size:12px; text-align:right; }
+    .cards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:16px; }
+    .card,.panel { background:var(--paper); border:1px solid var(--line); border-radius:17px; box-shadow:var(--shadow); }
+    .card { padding:17px; min-width:0; }
+    .card-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; margin-bottom:15px; }
+    .card h2 { margin:0; font-size:16px; letter-spacing:-.02em; }
+    .source-tag { color:var(--muted); font-size:9px; font-weight:850; letter-spacing:.07em; text-transform:uppercase; }
+    .primary { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:8px; }
+    .score { padding:11px 9px; border-radius:11px; background:var(--wash); min-width:0; }
+    .score span { display:block; color:var(--muted); font-size:9px; font-weight:850; letter-spacing:.07em; text-transform:uppercase; }
+    .score strong { display:block; margin-top:4px; font-size:21px; letter-spacing:-.04em; }
+    .score.bss strong { color:var(--teal); font-size:25px; }
+    .score.bss strong.negative { color:var(--dry); }
+    .raw { border-top:1px solid var(--line); margin-top:13px; padding-top:12px; }
+    .raw-title { display:flex; justify-content:space-between; gap:8px; margin-bottom:7px; color:var(--muted); font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
+    .gain { color:var(--teal); }
+    .raw-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; font-size:11px; }
+    .raw-grid span { color:var(--muted); }
+    .raw-grid strong { display:block; color:var(--ink); margin-top:2px; }
+    .unavailable { color:var(--muted); font-size:11px; line-height:1.45; }
+    .panel { padding:18px; min-width:0; }
+    .panel-head { display:flex; justify-content:space-between; gap:12px; align-items:baseline; margin-bottom:12px; }
+    .panel h2 { margin:0; font-size:17px; }
+    .panel-note { color:var(--muted); font-size:11px; }
+    #chart { width:100%; min-height:320px; display:block; }
+    .legend { display:flex; flex-wrap:wrap; gap:13px; margin-top:8px; }
+    .legend span { color:var(--muted); font-size:10px; font-weight:750; }
+    .legend i { display:inline-block; width:18px; height:3px; margin-right:5px; vertical-align:middle; border-radius:2px; }
+    .map-panel { margin-top:16px; }
+    .map-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .map-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+    .map-card { margin:0; border:1px solid var(--line); border-radius:13px; overflow:hidden; background:var(--wash); }
+    .map-card figcaption { padding:12px 12px 9px; background:#fff; border-bottom:1px solid var(--line); }
+    .map-card figcaption strong { display:block; font-size:12px; }
+    .map-card figcaption span { display:block; color:var(--muted); font-size:10px; margin-top:3px; line-height:1.35; }
+    .map-card img { display:block; width:100%; height:auto; background:#fff; }
+    .map-empty { min-height:250px; display:grid; place-items:center; padding:24px; color:var(--muted); text-align:center; font-size:11px; line-height:1.5; background:linear-gradient(135deg,#f7f9f8,#eef3f1); }
+    .map-legend { display:flex; flex-wrap:wrap; gap:6px 10px; padding:9px 11px 11px; background:#fff; color:var(--muted); font-size:9px; line-height:1.2; }
+    .map-legend span { display:inline-flex; align-items:center; gap:4px; }
+    .map-legend i { width:11px; height:11px; border-radius:2px; border:1px solid rgba(16,44,59,.12); }
+    .table-panel { margin-top:16px; overflow:hidden; }
+    .table-scroll { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:12px; }
+    th { color:var(--muted); font-size:9px; text-transform:uppercase; letter-spacing:.06em; text-align:right; padding:10px 12px; border-bottom:1px solid var(--line); white-space:nowrap; }
+    th:first-child,td:first-child { text-align:left; }
+    td { text-align:right; padding:12px; border-bottom:1px solid #edf1f1; }
+    tr:last-child td { border-bottom:0; }
+    footer { display:flex; justify-content:space-between; gap:16px; align-items:center; margin-top:17px; color:var(--muted); font-size:11px; }
+    footer a { color:var(--navy); font-weight:800; text-decoration:none; padding:8px 10px; background:rgba(255,255,255,.8); border:1px solid var(--line); border-radius:9px; }
+    @media (max-width:1100px) { .cards,.map-grid { grid-template-columns:1fr 1fr; } }
+    @media (max-width:720px) { .shell { width:min(100% - 22px,620px); margin-top:17px; } header,.toolbar,footer { align-items:flex-start; flex-direction:column; } .status,.cards,.map-grid { grid-template-columns:1fr; } .window { text-align:left; } .primary { grid-template-columns:repeat(3,1fr); } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <p class="eyebrow">IMD observation verification</p>
+        <h1>DryWetCast forecast skill</h1>
+        <p class="subtitle">Five-day DRY and WET event forecasts verified on the common 0.25° India grid. BSS evaluates probability skill against the 1991–2020 IMD climatology; POD and FAR use a 0.50 event threshold.</p>
+      </div>
+      <nav class="nav"><a href="index.html">Forecast comparison</a><a class="active" href="verification.html">Verification</a></nav>
+    </header>
+
+    <section class="status">
+      <div class="status-item"><span>IMD rainfall available through</span><strong id="obs-latest">—</strong></div>
+      <div class="status-item"><span>Latest verified initialization</span><strong id="init-latest">—</strong></div>
+      <div class="status-item"><span>Verified initializations</span><strong id="case-count">—</strong></div>
+      <div class="status-item"><span>Categorical threshold</span><strong id="threshold">≥ 0.50</strong></div>
+    </section>
+
+    <section class="toolbar">
+      <div class="controls">
+        <div class="control"><span class="control-label">Event</span><button class="active" data-event="dry">DRY</button><button data-event="wet">WET</button></div>
+        <div class="control"><span class="control-label">Period</span><select id="period"><option value="pooled">All verified dates · pooled</option></select></div>
+      </div>
+      <div class="window" id="window">Pooled across all complete five-day windows</div>
+    </section>
+
+    <section class="cards" id="cards"></section>
+
+    <section class="panel">
+        <div class="panel-head"><h2 id="chart-title">DRY BSS through time</h2><span class="panel-note">Post-processed probabilities</span></div>
+        <svg id="chart" viewBox="0 0 800 330" role="img" aria-label="Daily Brier Skill Score chart"></svg>
+        <div class="legend" id="legend"></div>
+    </section>
+
+    <section class="panel map-panel">
+      <div class="panel-head">
+        <div><h2>Spatial verification maps</h2><span class="panel-note">BSS is pooled through time at each land grid cell</span></div>
+        <div class="map-controls">
+          <span class="control-label">Configuration</span>
+          <select id="map-config"></select>
+          <span class="control-label">Forecast</span>
+          <button class="active" data-map-kind="post">Post-processed</button>
+          <button data-map-kind="raw">Raw ensemble</button>
+        </div>
+      </div>
+      <div class="map-grid" id="map-grid"></div>
+    </section>
+
+    <section class="panel table-panel">
+      <div class="panel-head"><h2 id="table-title">Pooled verification</h2><span class="panel-note">Counts are pooled before metrics are calculated</span></div>
+      <div class="table-scroll"><table><thead><tr><th>Configuration</th><th>Post BSS</th><th>Raw BSS</th><th>Δ BSS</th><th>Post POD</th><th>Raw POD</th><th>Post FAR</th><th>Raw FAR</th></tr></thead><tbody id="table-body"></tbody></table></div>
+    </section>
+
+    <footer><span>Each initialization is verified only after all five IMD observation days are available.</span><a href="downloads/verification_metrics.csv" download>Download verification CSV</a></footer>
+  </main>
+
+  <script>document.write('<script src="verification-data.js?v=' + Date.now() + '"><\/script>');</script>
+  <script>
+    const data = window.VERIFICATION_DATA;
+    const configs = ['gefs_reduced','gefs_full','ncmrwf_reduced','ncmrwf_full'];
+    const colors = {gefs_reduced:'#16a085',gefs_full:'#0c596d',ncmrwf_reduced:'#e29a32',ncmrwf_full:'#a84c32'};
+    let eventType = 'dry';
+    let period = 'pooled';
+    let mapConfig = 'gefs_reduced';
+    let mapKind = 'post';
+    const fmtDate = value => new Date(value.includes('-') ? value + 'T00:00:00' : `${value.slice(0,4)}-${value.slice(4,6)}-${value.slice(6,8)}T00:00:00`).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    const metric = value => value == null ? '—' : value.toFixed(3);
+    const signed = value => value == null ? '—' : `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(3)}`;
+    const selectedRecord = () => period === 'pooled' ? null : data.dates.find(item => item.initialization === period);
+    const selectedMetrics = config => period === 'pooled' ? data.pooled[config][eventType] : selectedRecord().metrics[config][eventType];
+
+    function setup() {
+      document.getElementById('obs-latest').textContent = fmtDate(data.observationLatest);
+      document.getElementById('init-latest').textContent = data.latestVerifiedInitialization ? fmtDate(data.latestVerifiedInitialization) : 'None yet';
+      document.getElementById('case-count').textContent = data.dates.length;
+      document.getElementById('threshold').textContent = `≥ ${data.threshold.toFixed(2)}`;
+      const select = document.getElementById('period');
+      [...data.dates].reverse().forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.initialization;
+        option.textContent = `Init ${fmtDate(item.initialization)}`;
+        select.appendChild(option);
+      });
+      if (data.latestVerifiedInitialization) {
+        select.value = data.latestVerifiedInitialization;
+        period = data.latestVerifiedInitialization;
+      }
+      select.addEventListener('change', () => { period = select.value; update(); });
+      const mapSelect = document.getElementById('map-config');
+      configs.forEach(config => {
+        const option = document.createElement('option');
+        option.value = config;
+        option.textContent = data.configLabels[config];
+        mapSelect.appendChild(option);
+      });
+      mapSelect.addEventListener('change', () => { mapConfig = mapSelect.value; updateMaps(); });
+      document.querySelectorAll('[data-map-kind]').forEach(button => button.addEventListener('click', () => { mapKind = button.dataset.mapKind; updateMaps(); }));
+      document.querySelectorAll('[data-event]').forEach(button => button.addEventListener('click', () => { eventType = button.dataset.event; update(); }));
+      update();
+    }
+
+    function card(config) {
+      const values = selectedMetrics(config);
+      const post = values.post;
+      const raw = values.raw;
+      const source = config.startsWith('gefs') ? 'GEFS rainfall' : 'NEPS rainfall';
+      const gain = raw && post.bss != null && raw.bss != null ? post.bss - raw.bss : null;
+      const rawBlock = raw ? `<div class="raw"><div class="raw-title"><span>Raw ensemble</span><span class="gain">ΔBSS ${signed(gain)}</span></div><div class="raw-grid"><div><span>BSS</span><strong>${signed(raw.bss)}</strong></div><div><span>POD</span><strong>${metric(raw.pod)}</strong></div><div><span>FAR</span><strong>${metric(raw.far)}</strong></div></div></div>` : `<div class="raw"><div class="unavailable">Raw ensemble probability was not archived for this period. Post-processing metrics remain valid.</div></div>`;
+      return `<article class="card"><div class="card-head"><h2>${data.configLabels[config]}</h2><span class="source-tag">${source}</span></div><div class="primary"><div class="score bss"><span>BSS</span><strong class="${post.bss < 0 ? 'negative' : ''}">${signed(post.bss)}</strong></div><div class="score"><span>POD</span><strong>${metric(post.pod)}</strong></div><div class="score"><span>FAR</span><strong>${metric(post.far)}</strong></div></div>${rawBlock}</article>`;
+    }
+
+    function chart() {
+      const svg = document.getElementById('chart');
+      const width=800,height=330,left=58,right=18,top=18,bottom=52,plotW=width-left-right,plotH=height-top-bottom;
+      const minY=-0.5,maxY=1.0;
+      const x = index => left + (data.dates.length <= 1 ? plotW/2 : index*plotW/(data.dates.length-1));
+      const y = value => top + (maxY-value)*plotH/(maxY-minY);
+      const parts=[];
+      [-0.5,0,0.5,1].forEach(value => { parts.push(`<line x1="${left}" y1="${y(value)}" x2="${width-right}" y2="${y(value)}" stroke="${value===0?'#9a5960':'#dce4e4'}" stroke-width="${value===0?1.2:1}"/><text x="${left-10}" y="${y(value)+4}" text-anchor="end" font-size="10" fill="#60747d">${value.toFixed(1)}</text>`); });
+      const tickEvery=Math.max(1,Math.ceil(data.dates.length/6));
+      data.dates.forEach((item,index) => {
+        if(index%tickEvery===0 || index===data.dates.length-1) {
+          const iso=`${item.initialization.slice(0,4)}-${item.initialization.slice(4,6)}-${item.initialization.slice(6,8)}T00:00:00Z`;
+          const label=new Date(iso).toLocaleDateString('en-GB',{day:'numeric',month:'short',timeZone:'UTC'});
+          parts.push(`<text x="${x(index)}" y="${height-22}" text-anchor="middle" font-size="9" fill="#60747d">${label}</text>`);
+        }
+      });
+      configs.forEach(config => {
+        const points=data.dates.map((item,index)=>({x:x(index),y:y(item.metrics[config][eventType].post.bss),v:item.metrics[config][eventType].post.bss,d:item.initialization})).filter(p=>Number.isFinite(p.v));
+        if(points.length) parts.push(`<polyline points="${points.map(p=>`${p.x},${p.y}`).join(' ')}" fill="none" stroke="${colors[config]}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`);
+        points.forEach(p=>parts.push(`<circle cx="${p.x}" cy="${p.y}" r="4" fill="white" stroke="${colors[config]}" stroke-width="2"><title>${data.configLabels[config]} · ${p.d} · BSS ${p.v.toFixed(3)}</title></circle>`));
+      });
+      parts.push(`<text x="16" y="${top+plotH/2}" transform="rotate(-90 16 ${top+plotH/2})" text-anchor="middle" font-size="10" fill="#60747d">Brier Skill Score</text>`);
+      svg.innerHTML=parts.join('');
+      document.getElementById('legend').innerHTML=configs.map(config=>`<span><i style="background:${colors[config]}"></i>${data.configLabels[config]}</span>`).join('');
+    }
+
+    const swatches = items => `<div class="map-legend">${items.map(item=>`<span><i style="background:${item[1]}"></i>${item[0]}</span>`).join('')}</div>`;
+    const probabilityLegend = () => swatches([
+      ['0–0.2',eventType==='dry'?'#FFF9E8':'#F1FAFE'],['0.2–0.4',eventType==='dry'?'#FCE7A2':'#CDECF7'],
+      ['0.4–0.6',eventType==='dry'?'#F9C65A':'#91D0E8'],['0.6–0.8',eventType==='dry'?'#F08A3C':'#4B9DCE'],
+      ['0.8–0.9',eventType==='dry'?'#C94B32':'#2166AC'],['0.9–1',eventType==='dry'?'#7F1D1D':'#08306B']]);
+    const observedLegend = swatches([['No event','#F4F6F5'],['Event','#2B8C6B']]);
+    const outcomeLegend = swatches([['Correct negative','#E8EEED'],['Hit','#2B8C6B'],['Miss','#E6A63C'],['False alarm','#C9473B']]);
+    const bssLegend = swatches([['≤ −0.5','#8E2344'],['−0.5 to −0.2','#CE5866'],['−0.2 to 0','#F2B5A7'],['0 to 0.2','#F4F1E8'],['0.2 to 0.5','#AAD7CB'],['≥ 0.5','#45A68E']]);
+
+    function mapCard(title, subtitle, source, legend, emptyText) {
+      const body = source ? `<img src="${source}?v=${data.generatedAt}" alt="${title}">` : `<div class="map-empty">${emptyText}</div>`;
+      return `<figure class="map-card"><figcaption><strong>${title}</strong><span>${subtitle}</span></figcaption>${body}${legend}</figure>`;
+    }
+
+    function updateMaps() {
+      document.querySelectorAll('[data-map-kind]').forEach(button => button.classList.toggle('active',button.dataset.mapKind===mapKind));
+      const record=selectedRecord();
+      const label=mapKind==='post'?'Post-processed':'Raw ensemble';
+      const selected = record && record.maps[mapConfig] && record.maps[mapConfig][eventType] ? record.maps[mapConfig][eventType][mapKind] : null;
+      const observed = record ? record.maps.observed[eventType] : null;
+      const bss = data.pooledMaps[mapConfig][eventType][mapKind];
+      const choose='Choose a single initialization above to display this map.';
+      const unavailable=record && mapKind==='raw' ? 'Raw ensemble probability was not archived for this initialization.' : choose;
+      document.getElementById('map-grid').innerHTML = [
+        mapCard('Forecast probability',`${label} ${eventType.toUpperCase()} event probability`,selected&&selected.probability,probabilityLegend(),unavailable),
+        mapCard('Observed binary event',`IMD event over the matching D1–D5 window`,observed,observedLegend,choose),
+        mapCard('Categorical outcome',`Threshold ${data.threshold.toFixed(2)} · ${label}`,selected&&selected.outcome,outcomeLegend,unavailable),
+        mapCard('Brier Skill Score',`${label} · pooled across dates; display clipped to −1…1`,bss,bssLegend,'No raw BSS map is available yet.'),
+      ].join('');
+    }
+
+    function update() {
+      document.querySelectorAll('[data-event]').forEach(button => button.classList.toggle('active',button.dataset.event===eventType));
+      const record=selectedRecord();
+      document.getElementById('window').textContent = record ? `Valid ${fmtDate(record.validStart)} – ${fmtDate(record.validEnd)}` : 'Pooled across all complete five-day windows';
+      document.getElementById('cards').innerHTML=configs.map(card).join('');
+      document.getElementById('chart-title').textContent=`${eventType.toUpperCase()} BSS through time`;
+      document.getElementById('table-title').textContent=record ? `Initialization ${fmtDate(record.initialization)}` : 'Pooled verification';
+      document.getElementById('table-body').innerHTML=configs.map(config=>{
+        const values=selectedMetrics(config),post=values.post,raw=values.raw,gain=raw&&post.bss!=null&&raw.bss!=null?post.bss-raw.bss:null;
+        return `<tr><td>${data.configLabels[config]}</td><td>${signed(post.bss)}</td><td>${raw?signed(raw.bss):'—'}</td><td>${signed(gain)}</td><td>${metric(post.pod)}</td><td>${raw?metric(raw.pod):'—'}</td><td>${metric(post.far)}</td><td>${raw?metric(raw.far):'—'}</td></tr>`;
+      }).join('');
+      chart();
+      updateMaps();
+    }
+    setup();
+  </script>
+</body>
+</html>

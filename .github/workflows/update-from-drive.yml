@@ -38,12 +38,32 @@ jobs:
       - name: Install dashboard dependencies
         run: pip install -r requirements.txt
 
+      - name: Set verification map cache date
+        id: cache-date
+        run: echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore previously rendered verification maps
+        uses: actions/cache@v4
+        with:
+          path: site/assets/verification
+          key: verification-maps-v1-${{ steps.cache-date.outputs.date }}
+          restore-keys: |
+            verification-maps-v1-
+
       - name: Download and validate latest complete forecast
         run: >-
           python scripts/update_dashboard.py
           --parent-folder-id "$DRIVE_PARENT_FOLDER_ID"
           --site-dir site
           --boundaries data/india_states.geojson
+
+      - name: Verify complete forecasts against provisional IMD rainfall
+        continue-on-error: true
+        run: >-
+          python scripts/update_verification.py
+          --parent-folder-id "$DRIVE_PARENT_FOLDER_ID"
+          --start-date 20261015
+          --site-dir site
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

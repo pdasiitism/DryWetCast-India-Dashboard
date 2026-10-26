@@ -116,6 +116,9 @@
     .downloads { display: flex; gap: 8px; flex-wrap: wrap; }
     .downloads a { color: var(--navy); text-decoration: none; font-weight: 750; padding: 8px 10px; background: rgba(255,255,255,.78); border: 1px solid var(--line); border-radius: 9px; }
     .downloads a:hover { background: white; }
+    .page-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+    .page-nav a { color: var(--navy); text-decoration: none; font-size: 13px; font-weight: 800; padding: 10px 13px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.82); }
+    .page-nav a.active { color: white; background: var(--navy); border-color: var(--navy); }
     @media (max-width: 1050px) {
       header { align-items: flex-start; flex-direction: column; }
       .controls { justify-content: flex-start; }
@@ -138,7 +141,9 @@
         <h1>DryWetCast India</h1>
         <p class="init" id="initialization">Initialization 15 October 2026, 00 UTC</p>
       </div>
-      <div class="controls" aria-label="Comparison controls">
+      <div>
+      <nav class="page-nav" aria-label="Dashboard pages"><a class="active" href="index.html">Forecast comparison</a><a href="verification.html">Verification</a></nav>
+      <div class="controls" aria-label="Comparison controls" style="margin-top:10px">
         <div class="control">
           <span class="control-label">Compare</span>
           <button class="active" data-mode="sources">GEFS vs NEPS</button>
@@ -159,6 +164,7 @@
           <button class="active" data-event="dry">DRY</button>
           <button data-event="wet">WET</button>
         </div>
+      </div>
       </div>
     </header>
 
