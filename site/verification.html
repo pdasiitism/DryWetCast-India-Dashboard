@@ -247,8 +247,8 @@
       const choose='Choose a single initialization above to display this map.';
       const unavailable=record && mapKind==='raw' ? 'Raw ensemble probability was not archived for this initialization.' : choose;
       document.getElementById('map-grid').innerHTML = [
-        mapCard('Forecast probability',`${label} ${eventType.toUpperCase()} event probability`,selected&&selected.probability,probabilityLegend(),unavailable),
         mapCard('Observed binary event',`IMD event over the matching D1–D5 window`,observed,observedLegend,choose),
+        mapCard('Forecast probability',`${label} ${eventType.toUpperCase()} event probability`,selected&&selected.probability,probabilityLegend(),unavailable),
         mapCard('Categorical outcome',`Threshold ${data.threshold.toFixed(2)} · ${label}`,selected&&selected.outcome,outcomeLegend,unavailable),
         mapCard('Brier Skill Score',`${label} · pooled across dates; display clipped to −1…1`,bss,bssLegend,'No raw BSS map is available yet.'),
       ].join('');
