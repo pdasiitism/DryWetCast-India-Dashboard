@@ -305,6 +305,8 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
                  for event in ('dry', 'wet')}
         for config in CONFIGS
     }
+    aifs_pool = {event: _empty_components() for event in ('dry', 'wet')}
+    aifs_map_pool = {event: _empty_map_components() for event in ('dry', 'wet')}
     final_map_dir = site_dir / 'assets' / 'verification'
     map_work = work_dir / 'verification-assets'
     if final_map_dir.exists():
@@ -313,6 +315,7 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
         map_work.mkdir(parents=True, exist_ok=True)
     segments = [np.column_stack((lon, lat)) for lon, lat in boundary_lines(boundary_path)]
     raw_counts = {config: 0 for config in CONFIGS}
+    aifs_raw_count = 0
     dates = []
     current = start_date
     while current <= latest_initialization:
@@ -355,6 +358,7 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
                       segments, map_work / Path(relative).name,
                       ['#F4F6F5', '#2B8C6B'], [-0.5, 0.5, 1.5])
             record['maps']['observed'][event] = relative
+        aifs_fields = None
         for config, metadata in files.items():
             destination = work_dir / f'{init}-{config}.npz'
             download_file(metadata['id'], destination)
@@ -368,11 +372,25 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
                     raise ValueError(f'{destination.name}: configuration is {archive_config}, expected {config}')
                 fields = {name: _validate_probability(f'{destination.name}:{name}', archive[name])
                           for name in archive.files
-                          if name in ('p_dry', 'p_wet', 'raw_p_dry', 'raw_p_wet')}
+                          if name in ('p_dry', 'p_wet', 'raw_p_dry', 'raw_p_wet',
+                                      'aifs_raw_p_dry', 'aifs_raw_p_wet')}
                 if 'p_dry' not in fields or 'p_wet' not in fields:
                     raise ValueError(f'{destination.name}: missing p_dry or p_wet')
                 if ('raw_p_dry' in fields) != ('raw_p_wet' in fields):
                     raise ValueError(f'{destination.name}: raw_p_dry and raw_p_wet must both be present')
+                if ('aifs_raw_p_dry' in fields) != ('aifs_raw_p_wet' in fields):
+                    raise ValueError(f'{destination.name}: aifs_raw_p_dry and aifs_raw_p_wet must both be present')
+                if 'aifs_raw_p_dry' in fields:
+                    current_aifs = {event: fields[f'aifs_raw_p_{event}'] for event in ('dry', 'wet')}
+                    if aifs_fields is None:
+                        aifs_fields = current_aifs
+                    else:
+                        for event in ('dry', 'wet'):
+                            if not np.allclose(aifs_fields[event], current_aifs[event],
+                                               equal_nan=True, rtol=0, atol=1e-7):
+                                raise ValueError(
+                                    f'{destination.name}: AIFS {event} probabilities differ '
+                                    'between configuration archives')
 
             record['metrics'][config] = {}
             record['maps'][config] = {}
@@ -415,6 +433,31 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
                 }
             if 'raw_p_dry' in fields and 'raw_p_wet' in fields:
                 raw_counts[config] += 1
+        record['metrics']['aifs_ens_v2'] = {}
+        record['maps']['aifs_ens_v2'] = {}
+        for event in ('dry', 'wet'):
+            aifs_metrics = None
+            aifs_maps = None
+            if aifs_fields is not None:
+                aifs_metrics, aifs_parts = score(
+                    aifs_fields[event], observed[event], clim[event], valid_observation, land)
+                _add_components(aifs_pool[event], aifs_parts)
+                _add_map_components(aifs_map_pool[event], aifs_fields[event],
+                                    observed[event], clim[event], valid_observation, land)
+                probability = _map_path(init, 'aifs_ens_v2', event, 'raw', 'probability')
+                outcome = _map_path(init, 'aifs_ens_v2', event, 'raw', 'outcome')
+                _draw_map(np.where(land, aifs_fields[event], np.nan), segments,
+                          map_work / Path(probability).name,
+                          DRY_COLORS if event == 'dry' else WET_COLORS, PROBABILITY_BOUNDS)
+                _draw_map(_outcome_field(aifs_fields[event], observed[event],
+                                         valid_observation, land),
+                          segments, map_work / Path(outcome).name,
+                          OUTCOME_COLORS, OUTCOME_BOUNDS)
+                aifs_maps = {'probability': probability, 'outcome': outcome}
+            record['metrics']['aifs_ens_v2'][event] = {'raw': aifs_metrics}
+            record['maps']['aifs_ens_v2'][event] = {'raw': aifs_maps}
+        if aifs_fields is not None:
+            aifs_raw_count += 1
         dates.append(record)
         current += timedelta(days=1)
 
@@ -427,6 +470,10 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
             for event in ('dry', 'wet')
         }
         for config in CONFIGS
+    }
+    aifs_pooled = {
+        event: {'raw': pooled_metrics(aifs_pool[event])}
+        for event in ('dry', 'wet')
     }
     pooled_maps = {config: {event: {} for event in ('dry', 'wet')} for config in CONFIGS}
     for config in CONFIGS:
@@ -444,6 +491,20 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
                 _draw_map(field, segments, map_work / Path(relative).name,
                           BSS_COLORS, BSS_BOUNDS, overwrite=True)
                 pooled_maps[config][event][kind] = relative
+    aifs_pooled_maps = {}
+    for event in ('dry', 'wet'):
+        components = aifs_map_pool[event]
+        use = (components['count'] > 0) & (components['climatology'] > 0)
+        if not np.any(use):
+            aifs_pooled_maps[event] = {'raw': None}
+            continue
+        field = np.full(TARGET_SHAPE, np.nan, dtype=np.float32)
+        field[use] = 1.0 - components['model'][use] / components['climatology'][use]
+        field = np.clip(field, -1, 1)
+        relative = f'assets/verification/pooled-aifs_ens_v2-{event}-raw-bss.png'
+        _draw_map(field, segments, map_work / Path(relative).name,
+                  BSS_COLORS, BSS_BOUNDS, overwrite=True)
+        aifs_pooled_maps[event] = {'raw': relative}
     result = {
         'generatedAt': datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z'),
         'observationLatest': imd_latest.isoformat(),
@@ -452,6 +513,7 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
         'provisional': True,
         'modelCommit': MODEL_COMMIT,
         'rawAvailability': raw_counts,
+        'aifsRawAvailability': aifs_raw_count,
         'configLabels': {
             'gefs_reduced': 'GEFS Reduced', 'gefs_full': 'GEFS Full',
             'ncmrwf_reduced': 'NEPS Reduced', 'ncmrwf_full': 'NEPS Full',
@@ -459,6 +521,8 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
         'dates': dates,
         'pooled': pooled,
         'pooledMaps': pooled_maps,
+        'aifsPooled': aifs_pooled,
+        'aifsPooledMaps': aifs_pooled_maps,
     }
     site_dir.mkdir(parents=True, exist_ok=True)
     downloads = site_dir / 'downloads'
@@ -491,6 +555,17 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
                             metrics['correctNegatives'], metrics['observedFraction'],
                             metrics['forecastFraction'], metrics['nCells'],
                         ])
+            for event in ('dry', 'wet'):
+                metrics = record['metrics']['aifs_ens_v2'][event]['raw']
+                if metrics is None:
+                    continue
+                writer.writerow([
+                    record['initialization'], record['validStart'], record['validEnd'],
+                    'aifs_ens_v2', event, 'raw', THRESHOLD, metrics['bss'],
+                    metrics['pod'], metrics['far'], metrics['hits'], metrics['misses'],
+                    metrics['falseAlarms'], metrics['correctNegatives'],
+                    metrics['observedFraction'], metrics['forecastFraction'], metrics['nCells'],
+                ])
     return result
 
 

@@ -34,7 +34,7 @@
     button[data-event="dry"].active { background:var(--dry); }
     button[data-event="wet"].active { background:var(--wet); }
     .window { color:var(--muted); font-size:12px; text-align:right; }
-    .cards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:16px; }
+    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-bottom:16px; }
     .card,.panel { background:var(--paper); border:1px solid var(--line); border-radius:17px; box-shadow:var(--shadow); }
     .card { padding:17px; min-width:0; }
     .card-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; margin-bottom:15px; }
@@ -115,7 +115,7 @@
     <section class="cards" id="cards"></section>
 
     <section class="panel">
-        <div class="panel-head"><h2 id="chart-title">DRY BSS through time</h2><span class="panel-note">Post-processed probabilities</span></div>
+        <div class="panel-head"><h2 id="chart-title">DRY BSS through time</h2><span class="panel-note">Post-processed products and raw AIFS_ENS V2</span></div>
         <svg id="chart" viewBox="0 0 800 330" role="img" aria-label="Daily Brier Skill Score chart"></svg>
         <div class="legend" id="legend"></div>
     </section>
@@ -147,6 +147,7 @@
     const data = window.VERIFICATION_DATA;
     const configs = ['gefs_reduced','gefs_full','ncmrwf_reduced','ncmrwf_full'];
     const colors = {gefs_reduced:'#16a085',gefs_full:'#0c596d',ncmrwf_reduced:'#e29a32',ncmrwf_full:'#a84c32'};
+    const aifsColor = '#6f7782';
     let eventType = 'dry';
     let period = 'pooled';
     let mapConfig = 'gefs_reduced';
@@ -156,6 +157,9 @@
     const signed = value => value == null ? '—' : `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(3)}`;
     const selectedRecord = () => period === 'pooled' ? null : data.dates.find(item => item.initialization === period);
     const selectedMetrics = config => period === 'pooled' ? data.pooled[config][eventType] : selectedRecord().metrics[config][eventType];
+    const selectedAifsMetrics = () => period === 'pooled'
+      ? (data.aifsPooled?.[eventType] || {raw:null})
+      : (selectedRecord().metrics.aifs_ens_v2?.[eventType] || {raw:null});
 
     function setup() {
       document.getElementById('obs-latest').textContent = fmtDate(data.observationLatest);
@@ -181,8 +185,20 @@
         option.textContent = data.configLabels[config];
         mapSelect.appendChild(option);
       });
-      mapSelect.addEventListener('change', () => { mapConfig = mapSelect.value; updateMaps(); });
-      document.querySelectorAll('[data-map-kind]').forEach(button => button.addEventListener('click', () => { mapKind = button.dataset.mapKind; updateMaps(); }));
+      const aifsOption = document.createElement('option');
+      aifsOption.value = 'aifs_ens_v2';
+      aifsOption.textContent = 'AIFS_ENS V2 · raw';
+      mapSelect.appendChild(aifsOption);
+      mapSelect.addEventListener('change', () => {
+        mapConfig = mapSelect.value;
+        if (mapConfig === 'aifs_ens_v2') mapKind = 'raw';
+        updateMaps();
+      });
+      document.querySelectorAll('[data-map-kind]').forEach(button => button.addEventListener('click', () => {
+        if (mapConfig === 'aifs_ens_v2' && button.dataset.mapKind === 'post') return;
+        mapKind = button.dataset.mapKind;
+        updateMaps();
+      }));
       document.querySelectorAll('[data-event]').forEach(button => button.addEventListener('click', () => { eventType = button.dataset.event; update(); }));
       update();
     }
@@ -193,8 +209,15 @@
       const raw = values.raw;
       const source = config.startsWith('gefs') ? 'GEFS rainfall' : 'NEPS rainfall';
       const gain = raw && post.bss != null && raw.bss != null ? post.bss - raw.bss : null;
-      const rawBlock = raw ? `<div class="raw"><div class="raw-title"><span>Raw ensemble</span><span class="gain">ΔBSS ${signed(gain)}</span></div><div class="raw-grid"><div><span>BSS</span><strong>${signed(raw.bss)}</strong></div><div><span>POD</span><strong>${metric(raw.pod)}</strong></div><div><span>FAR</span><strong>${metric(raw.far)}</strong></div></div></div>` : `<div class="raw"><div class="unavailable">Raw ensemble probability was not archived for this period. Post-processing metrics remain valid.</div></div>`;
+      const rawName = config.startsWith('gefs') ? 'Raw GEFS' : 'Raw NEPS';
+      const rawBlock = raw ? `<div class="raw"><div class="raw-title"><span>${rawName}</span><span class="gain">ΔBSS ${signed(gain)}</span></div><div class="raw-grid"><div><span>BSS</span><strong>${signed(raw.bss)}</strong></div><div><span>POD</span><strong>${metric(raw.pod)}</strong></div><div><span>FAR</span><strong>${metric(raw.far)}</strong></div></div></div>` : `<div class="raw"><div class="unavailable">${rawName} probability was not archived for this period. Post-processing metrics remain valid.</div></div>`;
       return `<article class="card"><div class="card-head"><h2>${data.configLabels[config]}</h2><span class="source-tag">${source}</span></div><div class="primary"><div class="score bss"><span>BSS</span><strong class="${post.bss < 0 ? 'negative' : ''}">${signed(post.bss)}</strong></div><div class="score"><span>POD</span><strong>${metric(post.pod)}</strong></div><div class="score"><span>FAR</span><strong>${metric(post.far)}</strong></div></div>${rawBlock}</article>`;
+    }
+
+    function aifsCard() {
+      const raw = selectedAifsMetrics().raw;
+      if (!raw) return `<article class="card"><div class="card-head"><h2>AIFS_ENS V2</h2><span class="source-tag">Raw AI ensemble · 51 members</span></div><div class="unavailable">AIFS raw-event probabilities were not archived for this period.</div></article>`;
+      return `<article class="card"><div class="card-head"><h2>AIFS_ENS V2</h2><span class="source-tag">Raw AI ensemble · 51 members</span></div><div class="primary"><div class="score bss"><span>BSS</span><strong class="${raw.bss < 0 ? 'negative' : ''}">${signed(raw.bss)}</strong></div><div class="score"><span>POD</span><strong>${metric(raw.pod)}</strong></div><div class="score"><span>FAR</span><strong>${metric(raw.far)}</strong></div></div></article>`;
     }
 
     function chart() {
@@ -218,9 +241,12 @@
         if(points.length) parts.push(`<polyline points="${points.map(p=>`${p.x},${p.y}`).join(' ')}" fill="none" stroke="${colors[config]}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`);
         points.forEach(p=>parts.push(`<circle cx="${p.x}" cy="${p.y}" r="4" fill="white" stroke="${colors[config]}" stroke-width="2"><title>${data.configLabels[config]} · ${p.d} · BSS ${p.v.toFixed(3)}</title></circle>`));
       });
+      const aifsPoints=data.dates.map((item,index)=>{const raw=item.metrics.aifs_ens_v2?.[eventType]?.raw;return {x:x(index),y:y(raw&&raw.bss),v:raw&&raw.bss,d:item.initialization};}).filter(p=>Number.isFinite(p.v));
+      if(aifsPoints.length) parts.push(`<polyline points="${aifsPoints.map(p=>`${p.x},${p.y}`).join(' ')}" fill="none" stroke="${aifsColor}" stroke-width="2.5" stroke-dasharray="7 5" stroke-linejoin="round" stroke-linecap="round"/>`);
+      aifsPoints.forEach(p=>parts.push(`<circle cx="${p.x}" cy="${p.y}" r="4" fill="white" stroke="${aifsColor}" stroke-width="2"><title>AIFS_ENS V2 raw · ${p.d} · BSS ${p.v.toFixed(3)}</title></circle>`));
       parts.push(`<text x="16" y="${top+plotH/2}" transform="rotate(-90 16 ${top+plotH/2})" text-anchor="middle" font-size="10" fill="#60747d">Brier Skill Score</text>`);
       svg.innerHTML=parts.join('');
-      document.getElementById('legend').innerHTML=configs.map(config=>`<span><i style="background:${colors[config]}"></i>${data.configLabels[config]}</span>`).join('');
+      document.getElementById('legend').innerHTML=configs.map(config=>`<span><i style="background:${colors[config]}"></i>${data.configLabels[config]}</span>`).join('')+`<span><i style="background:${aifsColor}"></i>AIFS_ENS V2 raw</span>`;
     }
 
     const swatches = items => `<div class="map-legend">${items.map(item=>`<span><i style="background:${item[1]}"></i>${item[0]}</span>`).join('')}</div>`;
@@ -238,14 +264,17 @@
     }
 
     function updateMaps() {
-      document.querySelectorAll('[data-map-kind]').forEach(button => button.classList.toggle('active',button.dataset.mapKind===mapKind));
+      document.querySelectorAll('[data-map-kind]').forEach(button => {
+        button.disabled = mapConfig === 'aifs_ens_v2' && button.dataset.mapKind === 'post';
+        button.classList.toggle('active',button.dataset.mapKind===mapKind);
+      });
       const record=selectedRecord();
-      const label=mapKind==='post'?'Post-processed':'Raw ensemble';
+      const label=mapConfig==='aifs_ens_v2'?'Raw AIFS_ENS V2':(mapKind==='post'?'Post-processed':(mapConfig.startsWith('gefs')?'Raw GEFS':'Raw NEPS'));
       const selected = record && record.maps[mapConfig] && record.maps[mapConfig][eventType] ? record.maps[mapConfig][eventType][mapKind] : null;
       const observed = record ? record.maps.observed[eventType] : null;
-      const bss = data.pooledMaps[mapConfig][eventType][mapKind];
+      const bss = mapConfig==='aifs_ens_v2' ? (data.aifsPooledMaps?.[eventType]?.raw || null) : data.pooledMaps[mapConfig][eventType][mapKind];
       const choose='Choose a single initialization above to display this map.';
-      const unavailable=record && mapKind==='raw' ? 'Raw ensemble probability was not archived for this initialization.' : choose;
+      const unavailable=record && mapKind==='raw' ? `${label} probability was not archived for this initialization.` : choose;
       document.getElementById('map-grid').innerHTML = [
         mapCard('Observed binary event',`IMD event over the matching D1–D5 window`,observed,observedLegend,choose),
         mapCard('Forecast probability',`${label} ${eventType.toUpperCase()} event probability`,selected&&selected.probability,probabilityLegend(),unavailable),
@@ -258,13 +287,13 @@
       document.querySelectorAll('[data-event]').forEach(button => button.classList.toggle('active',button.dataset.event===eventType));
       const record=selectedRecord();
       document.getElementById('window').textContent = record ? `Valid ${fmtDate(record.validStart)} – ${fmtDate(record.validEnd)}` : 'Pooled across all complete five-day windows';
-      document.getElementById('cards').innerHTML=configs.map(card).join('');
+      document.getElementById('cards').innerHTML=configs.map(card).join('')+aifsCard();
       document.getElementById('chart-title').textContent=`${eventType.toUpperCase()} BSS through time`;
       document.getElementById('table-title').textContent=record ? `Initialization ${fmtDate(record.initialization)}` : 'Pooled verification';
       document.getElementById('table-body').innerHTML=configs.map(config=>{
         const values=selectedMetrics(config),post=values.post,raw=values.raw,gain=raw&&post.bss!=null&&raw.bss!=null?post.bss-raw.bss:null;
         return `<tr><td>${data.configLabels[config]}</td><td>${signed(post.bss)}</td><td>${raw?signed(raw.bss):'—'}</td><td>${signed(gain)}</td><td>${metric(post.pod)}</td><td>${raw?metric(raw.pod):'—'}</td><td>${metric(post.far)}</td><td>${raw?metric(raw.far):'—'}</td></tr>`;
-      }).join('');
+      }).join('')+(()=>{const raw=selectedAifsMetrics().raw;return `<tr><td>AIFS_ENS V2 · raw</td><td>—</td><td>${raw?signed(raw.bss):'—'}</td><td>—</td><td>—</td><td>${raw?metric(raw.pod):'—'}</td><td>—</td><td>${raw?metric(raw.far):'—'}</td></tr>`;})();
       chart();
       updateMaps();
     }

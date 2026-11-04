@@ -44,7 +44,11 @@ real-time rainfall day and verifies every initialization whose full D1-D5 window
 observed. IMD and forecast fields already share the 129 x 135 grid. The verification
 CSV is written to `site/downloads/verification_metrics.csv`. Older NPZ archives with
 only `p_dry` and `p_wet` retain valid post-processed verification and are marked as
-not having raw probabilities.
+not having raw probabilities. Source-ensemble `raw_p_dry` and `raw_p_wet` are
+labelled explicitly as raw GEFS or raw NEPS. When any configuration archive for a
+date also contains `aifs_raw_p_dry` and `aifs_raw_p_wet`, AIFS_ENS V2 is verified
+once as a separate 51-member raw AI-ensemble baseline. If more than one archive
+contains the AIFS fields, the updater confirms that the copies agree.
 
 The workflow reads the folder through its public `Anyone with the link` pages. It does
 not use a Google login, Google Cloud access, Drive API key, GitHub secret or access to
