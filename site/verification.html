@@ -161,6 +161,20 @@
       ? (data.aifsPooled?.[eventType] || {raw:null})
       : (selectedRecord().metrics.aifs_ens_v2?.[eventType] || {raw:null});
 
+    function populateMapOptions() {
+      const mapSelect = document.getElementById('map-config');
+      const available = mapKind === 'raw' ? [...configs, 'aifs_ens_v2'] : configs;
+      if (!available.includes(mapConfig)) mapConfig = configs[0];
+      mapSelect.replaceChildren();
+      available.forEach(config => {
+        const option = document.createElement('option');
+        option.value = config;
+        option.textContent = config === 'aifs_ens_v2' ? 'AIFS_ENS V2' : data.configLabels[config];
+        mapSelect.appendChild(option);
+      });
+      mapSelect.value = mapConfig;
+    }
+
     function setup() {
       document.getElementById('obs-latest').textContent = fmtDate(data.observationLatest);
       document.getElementById('init-latest').textContent = data.latestVerifiedInitialization ? fmtDate(data.latestVerifiedInitialization) : 'None yet';
@@ -179,24 +193,14 @@
       }
       select.addEventListener('change', () => { period = select.value; update(); });
       const mapSelect = document.getElementById('map-config');
-      configs.forEach(config => {
-        const option = document.createElement('option');
-        option.value = config;
-        option.textContent = data.configLabels[config];
-        mapSelect.appendChild(option);
-      });
-      const aifsOption = document.createElement('option');
-      aifsOption.value = 'aifs_ens_v2';
-      aifsOption.textContent = 'AIFS_ENS V2 · raw';
-      mapSelect.appendChild(aifsOption);
+      populateMapOptions();
       mapSelect.addEventListener('change', () => {
         mapConfig = mapSelect.value;
-        if (mapConfig === 'aifs_ens_v2') mapKind = 'raw';
         updateMaps();
       });
       document.querySelectorAll('[data-map-kind]').forEach(button => button.addEventListener('click', () => {
-        if (mapConfig === 'aifs_ens_v2' && button.dataset.mapKind === 'post') return;
         mapKind = button.dataset.mapKind;
+        populateMapOptions();
         updateMaps();
       }));
       document.querySelectorAll('[data-event]').forEach(button => button.addEventListener('click', () => { eventType = button.dataset.event; update(); }));
@@ -265,7 +269,6 @@
 
     function updateMaps() {
       document.querySelectorAll('[data-map-kind]').forEach(button => {
-        button.disabled = mapConfig === 'aifs_ens_v2' && button.dataset.mapKind === 'post';
         button.classList.toggle('active',button.dataset.mapKind===mapKind);
       });
       const record=selectedRecord();
