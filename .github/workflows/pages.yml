@@ -10,12 +10,13 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -25,10 +26,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Preserve published results when updating the website
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/preserve_dashboard.py restore
+          --repository "${{ github.repository }}"
+          --site-dir site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
           path: site
+          retention-days: 30
       - name: Deploy GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
