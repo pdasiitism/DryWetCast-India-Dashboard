@@ -12,6 +12,7 @@ import tempfile
 
 
 GENERATED = ('data.js', 'verification-data.js', 'assets', 'downloads')
+VERIFICATION = ('verification-data.js', 'downloads/verification_metrics.csv', 'assets/verification')
 PUBLISH_WORKFLOWS = {'.github/workflows/pages.yml',
                      '.github/workflows/update-from-drive.yml'}
 
@@ -150,22 +151,30 @@ def refresh(site, command):
                 with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as handle:
                     handle.write(message + '\n')
             return False
-        replace_products(staged, site, ('verification-data.js',
-                         'downloads/verification_metrics.csv', 'assets/verification'))
+        replace_products(staged, site, VERIFICATION)
         print(f"Accepted verification through {candidate['latestVerifiedInitialization']}")
         return True
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['restore', 'refresh'])
+    parser.add_argument('action', choices=['restore', 'refresh', 'import'])
     parser.add_argument('--site-dir', type=Path, default=Path('site'))
     parser.add_argument('--repository')
+    parser.add_argument('--snapshot', type=Path)
     args, command = parser.parse_known_args()
     if args.action == 'restore':
         if not args.repository:
             parser.error('--repository is required for restore')
         restore(args.site_dir, args.repository)
+    elif args.action == 'import':
+        if not args.snapshot:
+            parser.error('--snapshot is required for import')
+        previous = validate(args.site_dir)
+        rebuilt = validate(args.snapshot)
+        ensure_no_regression(previous, rebuilt)
+        replace_products(args.snapshot, args.site_dir, VERIFICATION)
+        print(f"Imported verification through {rebuilt['latestVerifiedInitialization']}")
     else:
         if command[:1] == ['--']:
             command = command[1:]

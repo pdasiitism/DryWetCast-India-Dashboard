@@ -94,6 +94,7 @@ def forecast_files(folder: dict) -> dict[str, dict] | None:
 
 
 def latest_imd_date(as_of: date, cache_dir: Path, lookback: int = 7) -> date:
+    failures = []
     for offset in range(lookback + 1):
         candidate = as_of - timedelta(days=offset)
         value = candidate.isoformat()
@@ -103,6 +104,11 @@ def latest_imd_date(as_of: date, cache_dir: Path, lookback: int = 7) -> date:
             return candidate
         except imd.DataNotAvailableError:
             continue
+        except imd.DownloadError as error:
+            print(f'IMD rainfall check failed for {value}: {error}', flush=True)
+            failures.append(value)
+    if failures:
+        raise RuntimeError(f'Could not retrieve recent IMD rainfall; failed requests for {", ".join(failures)}')
     raise RuntimeError(f'No IMD real-time rainfall was available in the {lookback + 1}-day lookback')
 
 
