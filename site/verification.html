@@ -60,7 +60,8 @@
     #chart { width:100%; min-height:320px; display:block; }
     .legend { display:flex; flex-wrap:wrap; gap:13px; margin-top:8px; }
     .legend span { color:var(--muted); font-size:10px; font-weight:750; }
-    .legend i { display:inline-block; width:18px; height:3px; margin-right:5px; vertical-align:middle; border-radius:2px; }
+    .legend i { display:inline-block; width:18px; margin-right:5px; vertical-align:middle; border-top:2px solid; }
+    .legend .raw-key { border-top-style:dashed; }
     .map-panel { margin-top:16px; }
     .map-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .map-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
@@ -115,7 +116,7 @@
     <section class="cards" id="cards"></section>
 
     <section class="panel">
-        <div class="panel-head"><h2 id="chart-title">DRY BSS through time</h2><span class="panel-note">Post-processed products and raw AIFS_ENS V2</span></div>
+        <div class="panel-head"><h2 id="chart-title">DRY BSS through time</h2><span class="panel-note">Solid: post-processed · Dashed: raw</span></div>
         <svg id="chart" viewBox="0 0 800 330" role="img" aria-label="Daily Brier Skill Score chart"></svg>
         <div class="legend" id="legend"></div>
     </section>
@@ -147,7 +148,11 @@
     const data = window.VERIFICATION_DATA;
     const configs = ['gefs_reduced','gefs_full','ncmrwf_reduced','ncmrwf_full'];
     const colors = {gefs_reduced:'#16a085',gefs_full:'#0c596d',ncmrwf_reduced:'#e29a32',ncmrwf_full:'#a84c32'};
-    const aifsColor = '#6f7782';
+    const rawSeries = [
+      {label:'Raw GEFS', color:'#315e95', configs:['gefs_reduced', 'gefs_full']},
+      {label:'Raw NEPS', color:'#8a4679', configs:['ncmrwf_reduced', 'ncmrwf_full']},
+      {label:'Raw AIFS-ENS v2', color:'#545d67', configs:['aifs_ens_v2']},
+    ];
     let eventType = 'dry';
     let period = 'pooled';
     let mapConfig = 'gefs_reduced';
@@ -227,11 +232,38 @@
     function chart() {
       const svg = document.getElementById('chart');
       const width=800,height=330,left=58,right=18,top=18,bottom=52,plotW=width-left-right,plotH=height-top-bottom;
-      const minY=-0.5,maxY=1.0;
+      const series = [
+        ...configs.map(config => ({
+          label:data.configLabels[config],
+          color:colors[config],
+          values:data.dates.map(item => item.metrics[config][eventType].post?.bss),
+        })),
+        ...rawSeries.map(source => ({
+          label:source.label,
+          color:source.color,
+          dashed:true,
+          values:data.dates.map(item => source.configs
+            .map(config => item.metrics[config]?.[eventType]?.raw?.bss)
+            .find(Number.isFinite)),
+        })),
+      ].filter(line => line.values.some(Number.isFinite));
+      const values = series.flatMap(line => line.values.filter(Number.isFinite));
+      const lower = Math.min(0, ...values);
+      const upper = Math.max(0, ...values);
+      const roughStep = (upper - lower || 1) / 5;
+      const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+      const step = [1, 2, 2.5, 5, 10].find(size => size * magnitude >= roughStep) * magnitude;
+      const firstTick = Math.floor(lower / step);
+      const lastTick = Math.max(firstTick + 1, Math.ceil(upper / step));
+      const minY = firstTick * step, maxY = lastTick * step;
       const x = index => left + (data.dates.length <= 1 ? plotW/2 : index*plotW/(data.dates.length-1));
       const y = value => top + (maxY-value)*plotH/(maxY-minY);
       const parts=[];
-      [-0.5,0,0.5,1].forEach(value => { parts.push(`<line x1="${left}" y1="${y(value)}" x2="${width-right}" y2="${y(value)}" stroke="${value===0?'#9a5960':'#dce4e4'}" stroke-width="${value===0?1.2:1}"/><text x="${left-10}" y="${y(value)+4}" text-anchor="end" font-size="10" fill="#60747d">${value.toFixed(1)}</text>`); });
+      for (let tick = firstTick; tick <= lastTick; tick++) {
+        const value = tick * step;
+        const label = Number(value.toPrecision(6)).toString();
+        parts.push(`<line x1="${left}" y1="${y(value)}" x2="${width-right}" y2="${y(value)}" stroke="${tick===0?'#637681':'#dce4e4'}" stroke-width="${tick===0?1.4:1}"/><text x="${left-10}" y="${y(value)+4}" text-anchor="end" font-size="10" fill="#60747d">${label}</text>`);
+      }
       const tickEvery=Math.max(1,Math.ceil(data.dates.length/6));
       data.dates.forEach((item,index) => {
         if(index%tickEvery===0 || index===data.dates.length-1) {
@@ -240,17 +272,24 @@
           parts.push(`<text x="${x(index)}" y="${height-22}" text-anchor="middle" font-size="9" fill="#60747d">${label}</text>`);
         }
       });
-      configs.forEach(config => {
-        const points=data.dates.map((item,index)=>({x:x(index),y:y(item.metrics[config][eventType].post.bss),v:item.metrics[config][eventType].post.bss,d:item.initialization})).filter(p=>Number.isFinite(p.v));
-        if(points.length) parts.push(`<polyline points="${points.map(p=>`${p.x},${p.y}`).join(' ')}" fill="none" stroke="${colors[config]}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`);
-        points.forEach(p=>parts.push(`<circle cx="${p.x}" cy="${p.y}" r="4" fill="white" stroke="${colors[config]}" stroke-width="2"><title>${data.configLabels[config]} · ${p.d} · BSS ${p.v.toFixed(3)}</title></circle>`));
-      });
-      const aifsPoints=data.dates.map((item,index)=>{const raw=item.metrics.aifs_ens_v2?.[eventType]?.raw;return {x:x(index),y:y(raw&&raw.bss),v:raw&&raw.bss,d:item.initialization};}).filter(p=>Number.isFinite(p.v));
-      if(aifsPoints.length) parts.push(`<polyline points="${aifsPoints.map(p=>`${p.x},${p.y}`).join(' ')}" fill="none" stroke="${aifsColor}" stroke-width="2.5" stroke-dasharray="7 5" stroke-linejoin="round" stroke-linecap="round"/>`);
-      aifsPoints.forEach(p=>parts.push(`<circle cx="${p.x}" cy="${p.y}" r="4" fill="white" stroke="${aifsColor}" stroke-width="2"><title>AIFS_ENS V2 raw · ${p.d} · BSS ${p.v.toFixed(3)}</title></circle>`));
+      for (const line of series) {
+        const path = [];
+        const markers = [];
+        line.values.forEach((value, index) => {
+          if (!Number.isFinite(value)) return;
+          const pointX = x(index), pointY = y(value);
+          const command = Number.isFinite(line.values[index - 1]) ? 'L' : 'M';
+          path.push(`${command}${pointX},${pointY}`);
+          markers.push(`<circle cx="${pointX}" cy="${pointY}" r="2.5" fill="white" stroke="${line.color}" stroke-width="1.4"><title>${line.label} · ${fmtDate(data.dates[index].initialization)} · BSS ${value.toFixed(3)}</title></circle>`);
+        });
+        const dash = line.dashed ? 'stroke-dasharray="6 4"' : '';
+        parts.push(`<path d="${path.join(' ')}" fill="none" stroke="${line.color}" stroke-width="2" ${dash} stroke-linejoin="round" stroke-linecap="round"/>`, ...markers);
+      }
       parts.push(`<text x="16" y="${top+plotH/2}" transform="rotate(-90 16 ${top+plotH/2})" text-anchor="middle" font-size="10" fill="#60747d">Brier Skill Score</text>`);
       svg.innerHTML=parts.join('');
-      document.getElementById('legend').innerHTML=configs.map(config=>`<span><i style="background:${colors[config]}"></i>${data.configLabels[config]}</span>`).join('')+`<span><i style="background:${aifsColor}"></i>AIFS_ENS V2 raw</span>`;
+      document.getElementById('legend').innerHTML = series.map(line =>
+        `<span><i class="${line.dashed ? 'raw-key' : ''}" style="border-color:${line.color}"></i>${line.label}</span>`
+      ).join('');
     }
 
     const swatches = items => `<div class="map-legend">${items.map(item=>`<span><i style="background:${item[1]}"></i>${item[0]}</span>`).join('')}</div>`;
