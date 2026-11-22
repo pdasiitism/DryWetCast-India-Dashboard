@@ -39,6 +39,13 @@ jobs:
       - name: Install dashboard dependencies
         run: pip install -r requirements.txt
 
+      - name: Cache validated IMD rainfall downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/imdlib
+          key: imd-rainfall-v1-${{ github.run_id }}
+          restore-keys: imd-rainfall-v1-
+
       - name: Restore last successfully published results
         env:
           GH_TOKEN: ${{ github.token }}

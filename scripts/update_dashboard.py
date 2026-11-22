@@ -12,6 +12,9 @@ import re
 import shutil
 import ssl
 import tempfile
+import time
+import zipfile
+from urllib.error import URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
@@ -76,8 +79,23 @@ def drive_children(folder_id: str) -> list[dict]:
 def download_file(file_id: str, destination: Path) -> None:
     params = urlencode({'id': file_id, 'export': 'download', 'confirm': 't'})
     request = Request(f'{DRIVE_DOWNLOAD_URL}?{params}', headers={'User-Agent': USER_AGENT})
-    with urlopen(request, timeout=180, context=SSL_CONTEXT) as response, destination.open('wb') as handle:
-        shutil.copyfileobj(response, handle)
+    temporary = destination.with_suffix(destination.suffix + '.part')
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=180, context=SSL_CONTEXT) as response, temporary.open('wb') as handle:
+                shutil.copyfileobj(response, handle)
+            if destination.suffix == '.npz':
+                with zipfile.ZipFile(temporary) as archive:
+                    if archive.testzip() is not None:
+                        raise zipfile.BadZipFile('Forecast archive failed its integrity check')
+            temporary.replace(destination)
+            return
+        except (URLError, OSError, zipfile.BadZipFile):
+            if attempt == 2:
+                raise
+            time.sleep(2 * (attempt + 1))
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 def locate_latest_complete(parent_id: str) -> tuple[str, str, dict[str, dict]]:

@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 from matplotlib.colors import BoundaryNorm, ListedColormap
 import numpy as np
+from imd_observations import load_rainfall
 
 from update_dashboard import (
     CONFIGS, DATE_PATTERN, DRY_COLORS, FOLDER_MIME, PROBABILITY_BOUNDS,
@@ -97,7 +98,8 @@ def latest_imd_date(as_of: date, cache_dir: Path, lookback: int = 7) -> date:
         candidate = as_of - timedelta(days=offset)
         value = candidate.isoformat()
         try:
-            imd.load('rain', value, value, source='realtime', cache_dir=str(cache_dir), progress=False)
+            load_rainfall(value, value, cache_dir)
+            print(f'Latest available IMD rainfall: {value}', flush=True)
             return candidate
         except imd.DataNotAvailableError:
             continue
@@ -266,9 +268,8 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
     if latest_initialization < start_date:
         raise RuntimeError('IMD does not yet contain five observed days for the first forecast')
 
-    rainfall = imd.load(
-        'rain', (start_date + timedelta(days=1)).isoformat(), imd_latest.isoformat(),
-        source='realtime', cache_dir=str(cache_dir), progress=False,
+    rainfall = load_rainfall(
+        (start_date + timedelta(days=1)).isoformat(), imd_latest.isoformat(), cache_dir,
     ).get_xarray()['rain']
     if rainfall.dims != ('time', 'lat', 'lon'):
         raise ValueError(f'Unexpected IMD rainfall dimensions: {rainfall.dims}')
@@ -334,6 +335,10 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
             current += timedelta(days=1)
             continue
         daily_rain = np.stack([rain_by_date[value] for value in observed_dates])
+        if not np.all(np.any(np.isfinite(daily_rain) & (daily_rain >= 0), axis=(1, 2))):
+            print(f'Skipping {init}: at least one IMD observation day is missing', flush=True)
+            current += timedelta(days=1)
+            continue
         valid_observation = np.all(np.isfinite(daily_rain) & (daily_rain >= 0), axis=0)
         dry_days = daily_rain < 1.0
         observed = {
@@ -359,6 +364,7 @@ def build_verification(parent_id: str, start: str, site_dir: Path, work_dir: Pat
                       ['#F4F6F5', '#2B8C6B'], [-0.5, 0.5, 1.5])
             record['maps']['observed'][event] = relative
         aifs_fields = None
+        print(f'Verifying {init} against IMD rainfall {observed_dates[0]} to {observed_dates[-1]}', flush=True)
         for config, metadata in files.items():
             destination = work_dir / f'{init}-{config}.npz'
             download_file(metadata['id'], destination)
